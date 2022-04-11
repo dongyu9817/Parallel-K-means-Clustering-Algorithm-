@@ -53,6 +53,7 @@ static void show_help(const char *program_path)
     //printf("\t-n <num_of_threads> (required)\n");
     printf("\t-k <number of clusters>\n");
     printf("\t-o <output filename>\n");
+    printf("\t-c <output centroid filename>\n");
 }
 
 
@@ -90,12 +91,31 @@ void write_outputfile (const char* output_filename, int* num_points, points_t* p
         return;
     }
 
-    fprintf(output, "%d \n", *num_points);
+    //fprintf(output, "%d \n", *num_points);
 	
     for (int i = 0; i < *num_points; ++i)
     {
         	
         fprintf(output, "%d %d %d\n", points_list[i].x, points_list[i].y, points_list[i].cluster);
+    }
+
+    fclose (output);
+}
+
+void write_centroidfile (const char* output_filename, int cluster, centroids_t* centroids_list) {
+    FILE *output = fopen(output_filename, "w");
+
+    if (!output)
+    {
+        printf("Unable to open file: %s.\n", output_filename);
+        return;
+    }
+
+    //fprintf(output, "%d \n", *num_points);
+	
+    for (int i = 0; i < cluster; ++i)
+    {	
+        fprintf(output, "%d %d\n", centroids_list[i].x, centroids_list[i].y);
     }
 
     fclose (output);
@@ -117,6 +137,8 @@ int main(int argc, const char *argv[])
     const char *input_filename = get_option_string("-f", NULL);
     int clusters = get_option_int("-k", 1);
     const char *output_filename = get_option_string("-o", NULL);
+    const char *output_centroid_filename = get_option_string("-c", NULL);
+    //output_centroid_filename
     int num_points;
     points_t* points_list;
     centroids_t* centroids_list;
@@ -156,5 +178,5 @@ int main(int argc, const char *argv[])
     printf("Computation Time: %lf.\n", compute_time);
     
     write_outputfile(output_filename, &num_points, points_list);
-
+    write_centroidfile (output_centroid_filename, clusters, centroids_list);
 }

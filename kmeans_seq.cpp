@@ -95,7 +95,6 @@ void kmeans_sequential(int *n_points, int clusters, points_t **p_list, centroids
             centroids_list[i].prevx = centroids_list[i].x;
             centroids_list[i].prevy = centroids_list[i].y;
             centroids_list[i].x = meanx;
-            centroids_list[i].x = meanx;
             centroids_list[i].y = meany;
             centroids_list[i].count = 0;
             centroids_list[i].sum_px = 0;
@@ -106,9 +105,9 @@ void kmeans_sequential(int *n_points, int clusters, points_t **p_list, centroids
         convergence = compute_convergence (centroids_list, clusters);
         // check convergence
         ++curr_iters;
-        //printf ("new the nearest centroids\n");
+        //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
-    } while (convergence != 1 || curr_iters < 10000);
+    } while (convergence != 1 || curr_iters < 1000);
 
     return;
 }
