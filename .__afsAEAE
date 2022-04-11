@@ -1,3 +1,4 @@
+
 /**
  * Sequential K-means cluster Algorithm
  * Yu Dong (Yu Dong)
@@ -13,9 +14,7 @@
 #include <omp.h>
 #include <cmath>
 #include <string>
-#include <cmath>
-#include <stdlib.h>
-#include <stdio.h>
+
 
 static int _argc;
 static const char **_argv;
@@ -56,50 +55,6 @@ static void show_help(const char *program_path)
 }
 
 
-void read_inputfile (const char* input_filename, int* num_points, points_t** points_list) {
-    FILE *input = fopen(input_filename, "r");
-
-    if (!input)
-    {
-        printf("Unable to open file: %s.\n", input_filename);
-        return;
-    }
-
-    fscanf(input, "%d \n", num_points);
-    *points_list = (points_t*)malloc(sizeof(points_t)*((*num_points)));
-
-    for (int i = 0; i < *num_points; ++i)
-    {
-        int xval;
-        int yval;
-        fscanf(input, "%d %d\n", &xval, &yval);
-        (*points_list + i)->x = xval;
-        (*points_list + i)->y = yval;
-        (*points_list + i)->cluster = -1;
-    }
-    
-    fclose (input);
-}
-
-void write_outputfile (const char* output_filename, int* num_points, points_t* points_list) {
-    FILE *output = fopen(output_filename, "w");
-
-    if (!output)
-    {
-        printf("Unable to open file: %s.\n", output_filename);
-        return;
-    }
-
-    fprintf(output, "%d \n", *num_points);
-	
-    for (int i = 0; i < *num_points; ++i)
-    {
-        	
-        fprintf(output, "%d %d %d\n", points_list[i].x, points_list[i].y, points_list[i].cluster);
-    }
-
-    fclose (output);
-}
 
 
 int main(int argc, const char *argv[])
@@ -117,10 +72,6 @@ int main(int argc, const char *argv[])
     const char *input_filename = get_option_string("-f", NULL);
     int clusters = get_option_int("-k", 1);
     const char *output_filename = get_option_string("-o", NULL);
-    int num_points;
-    points_t* points_list;
-    centroids_t* centroids_list;
-    int iterations;
     // double doubleval = get_option_float("-p", 0.1f);
     // int intval = get_option_int("-i", 5); 
 
@@ -141,20 +92,33 @@ int main(int argc, const char *argv[])
     printf("Number of clusters: %d\n", clusters);
     printf("Input file: %s\n", input_filename);
     printf("Output file: %s\n", output_filename);
+    FILE *input = fopen(input_filename, "r");
 
-    read_inputfile (input_filename, &num_points, &points_list);
-    printf ("number of points %d %d \n", points_list[300].x, 1);
-    init_time += duration_cast<dsec>(Clock::now() - init_start).count();
-    printf("Initialization Time: %lf.\n", init_time);
+    if (!input)
+    {
+        printf("Unable to open file: %s.\n", input_filename);
+        return 1;
+    }
 
-    auto compute_start = Clock::now();
-    double compute_time = 0;
-    //sequential computation
-    kmeans_sequential(&num_points, clusters, points_list, centroids_list,  iterations);
+    int dim_x, dim_y;
+    int num_of_wires;
 
-    compute_time += duration_cast<dsec>(Clock::now() - compute_start).count();
-    printf("Computation Time: %lf.\n", compute_time);
-    
-    write_outputfile(output_filename, &num_points, points_list);
-
+    fscanf(input, "%d %d\n", &dim_y, &dim_x);
+    fscanf(input, "%d\n", &num_of_wires);
+    // num_of_wires = 2;
+    wire_t *wires_temp = (wire_t *)calloc(num_of_wires, sizeof(wire_t));
+	wire_t *wires = (wire_t *)calloc(num_of_wires, sizeof(wire_t));
+	//sort the wire array from small to large
+	int array[num_of_wires][2];
+    /* Read the grid dimension and wire information from file */
+    for (int i = 0; i < num_of_wires; ++i)
+    {
+        int sx, sy; // start point
+        int ex, ey; // end point
+        fscanf(input, "%d %d %d %d\n", &sx, &sy, &ex, &ey);
+        wire_t *temp = wire_maker(0, sx, sy, ex, ey, 0, 0, 0, 0, 0);
+		wires_temp[i] = *temp;
+		array[i][0] = abs(ex - sx) * abs(ey - sy);
+		array[i][1] = i;
+    }
 }

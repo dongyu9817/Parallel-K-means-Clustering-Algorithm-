@@ -16,6 +16,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-void kmeans_sequential(int num_points, int clusters, points_t* points_list, centroids_t* centroids_list, int* iterations){
+void kmeans_sequential(int* num_points, int clusters, points_t* points_list, centroids_t* centroids_list, int iterations){
 
 }
