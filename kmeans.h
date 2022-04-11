@@ -11,6 +11,7 @@
 typedef struct { 
     int x; //x axis coordinate
     int y; //y axis coordinate
+    float distance;
     int cluster; //the cluster id to which a point belongs to
     
 } points_t;
@@ -18,11 +19,17 @@ typedef struct {
 typedef struct { 
     int x; //x axis coordinate
     int y; //y axis coordinate
+    int prevx;
+    int prevy;
+    int sum_px;
+    int sum_py;
+    int count;
+
     //centroids of each iteration untill convergence
 } centroids_t;
 
 
-void kmeans_sequential(int* num_points, int clusters, points_t* points_list, centroids_t* centroids_list, int iterations);
+void kmeans_sequential(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
 
 const char *get_option_string(const char *option_name, const char *default_value);
 int get_option_int(const char *option_name, int default_value);
