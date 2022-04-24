@@ -171,8 +171,8 @@ int main(int argc, const char *argv[])
 
     auto compute_start = Clock::now();
     double compute_time = 0;
-    //sequential computation
-    kmeans_sequential(&num_points, clusters, &points_list, &centroids_list,  iterations);
+    //cuda computation
+    kmeans_cuda(&num_points, clusters, &points_list, &centroids_list,  iterations);
     
     compute_time += duration_cast<dsec>(Clock::now() - compute_start).count();
     printf("Computation Time: %lf.\n", compute_time);

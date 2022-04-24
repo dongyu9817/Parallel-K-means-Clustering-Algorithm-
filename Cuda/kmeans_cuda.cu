@@ -1,8 +1,8 @@
 /**
- * Sequential K-means cluster Algorithm
+ * Cuda K-means cluster Algorithm
+ * This is the implementation of k-means clustering algorithm in CUDA version
  * Yu Dong (Yu Dong)
  */
-
 #include "kmeans.h"
 
 #include <assert.h>
@@ -16,34 +16,34 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-float compute_distance(points_t point, centroids_t centroid)
-{
-    int px = point.x;
-    int py = point.y;
-    int cx = centroid.x;
-    int cy = centroid.y;
+//global constant variable
+int threadPerBlock = 128;
 
-    float xdiff = px - cx;
-    float ydiff = py - cy;
-
-    return sqrt(pow(xdiff, 2) + pow(ydiff, 2));
+static inline int FindNextPower2 (int num) {
+    num -= 1;
+    num |= num >> 1;
+    num |= num >> 2;
+    num |= num >> 4;
+    num |= num >> 8;
+    num |= num >> 16;
+    //num |= num >> 32;
+    num += 1;
+    return num;
 }
 
-int compute_convergence (centroids_t* centroids_list, int clusters) {
-    for (int i = 0; i < clusters; ++i)
-    {
-        if (centroids_list[i].x != centroids_list[i].prevx || centroids_list[i].y != centroids_list[i].prevy ) {
-            return 0;
-        }
-    }
-    return 1;
+__global__ static void findNearnestNeighbor(points_t* gpu_points_list, centroids_t* gpu_centroids_list ) {
+ 
+
 }
-void kmeans_sequential(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
+
+void kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
 {
+    //host data
     points_t *points_list = *p_list;
     int num_points = *n_points;
     *c_list = (centroids_t *)malloc(sizeof(centroids_t) * clusters);
     centroids_t *centroids_list = *c_list;
+    
     // randomly pick centroid based on the cluster number
     // get the initial centroids
     srand(time(0));
@@ -59,14 +59,34 @@ void kmeans_sequential(int *n_points, int clusters, points_t **p_list, centroids
         centroids_list[i].count =0;
     }
 
+    //device data on gpu
+    points_t *gpu_points_list;
+    centroids_t *gpu_centroids_list = *c_list;
+    
+    //Copy data from device to GPU
+    cudaMalloc (&gpu_points_list, num_points* sizeof(points_t));
+    cudaMalloc (&gpu_centroids_list, sizeof(centroids_t) * clusters);
+    cudaMemcpy (gpu_points_list,points_list, num_points* sizeof(points_t), cudaMemcpyHostToDevice );
+    cudaMemcpy (gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice );
+ 
+    //initialize CUDA constants
+    const unsigned int blocks = (num_points + threadPerBlock -1) / threadPerBlock;
+    const unsigned int blocks_rounded =FindNextPower2 (blocks);
+    //initialize cluster shared date for each block
+    const unsigned int blocks_sharedInfo;
+
     // update stage
     int convergence = 0;
     int curr_iters =0;
     double detla;
+
     do
     {
         delta = 0.0;
         // get the nearest centroids
+        findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo >>> (gpu_points_list, gpu_centroids_list );
+        cudaDeviceSynchronize();
+
         for (int i = 0; i < num_points; ++i)
         {
             float  path_min = 0;
