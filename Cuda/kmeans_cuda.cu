@@ -3,18 +3,14 @@
  * This is the implementation of k-means clustering algorithm in CUDA version
  * Yu Dong (Yu Dong)
  */
-#include "kmeans.h"
+#include "../kmeans.h"
 
-#include <assert.h>
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <cmath>
+#include <math.h>
+#include <vector>
 #include <string>
-#include <cmath>
 #include <stdlib.h>
 #include <stdio.h>
+#include "CycleTimer.h"
 
 //global constant variable
 int threadPerBlock = 128;
@@ -31,19 +27,28 @@ static inline int FindNextPower2 (int num) {
     return num;
 }
 
-__global__ static void findNearnestNeighbor(points_t* gpu_points_list, centroids_t* gpu_centroids_list ) {
- 
+__global__ static void findNearnestNeighbor(points_t* gpu_points_list, centroids_t* gpu_centroids_list, metaInfo_t* gpu_metadata ) {
+    //gpu find the nearnest neighbor parallel function
+    //each thread is responsible for one datapoint
+    int numPoints = gpu_metadata->numpoints;
+    int clusters = gpu_metadata->cluster;
+    int dataid = blockDim.x * blockIdx.x + threadIdx.x;
+    if (dataid > numPoints) return;
 
 }
 
-void kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
+double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
 {
     //host data
     points_t *points_list = *p_list;
     int num_points = *n_points;
     *c_list = (centroids_t *)malloc(sizeof(centroids_t) * clusters);
     centroids_t *centroids_list = *c_list;
-    
+    metaInfo_t *metaData = (metaInfo_t *)malloc(sizeof(metaInfo_t));
+    metaData->numpoints = num_points;
+    metaData->iterations = iterations;
+    metaData->cluster = clusters;
+
     // randomly pick centroid based on the cluster number
     // get the initial centroids
     srand(time(0));
@@ -62,76 +67,82 @@ void kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t **c
     //device data on gpu
     points_t *gpu_points_list;
     centroids_t *gpu_centroids_list = *c_list;
-    
+    metaInfo_t *gpu_metaData;
     //Copy data from device to GPU
     cudaMalloc (&gpu_points_list, num_points* sizeof(points_t));
     cudaMalloc (&gpu_centroids_list, sizeof(centroids_t) * clusters);
+    cudaMalloc (&gpu_metaData, sizeof(metaInfo_t));
     cudaMemcpy (gpu_points_list,points_list, num_points* sizeof(points_t), cudaMemcpyHostToDevice );
     cudaMemcpy (gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice );
+    cudaMemcpy (gpu_metaData, metaData, sizeof(metaInfo_t), cudaMemcpyHostToDevice );
  
     //initialize CUDA constants
     const unsigned int blocks = (num_points + threadPerBlock -1) / threadPerBlock;
     const unsigned int blocks_rounded =FindNextPower2 (blocks);
     //initialize cluster shared date for each block
-    const unsigned int blocks_sharedInfo;
+    const unsigned int blocks_sharedInfo = 1;
 
     // update stage
     int convergence = 0;
     int curr_iters =0;
-    double detla;
+    double delta= 0.0;
+
+    double startTime = CycleTimer::currentSeconds();
 
     do
     {
         delta = 0.0;
         // get the nearest centroids
-        findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo >>> (gpu_points_list, gpu_centroids_list );
+        findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo >>> (gpu_points_list, gpu_centroids_list, gpu_metaData );
         cudaDeviceSynchronize();
 
-        for (int i = 0; i < num_points; ++i)
-        {
-            float  path_min = 0;
-            float  path_curr;
-            int cluster_id = 0;
-            for (int j = 0; j < clusters; ++j)
-            {
-                path_curr = compute_distance(points_list[i], centroids_list[j]);
-                if (path_min == 0 || path_curr < path_min)
-                {
-                    path_min = path_curr;
-                    cluster_id = j;
-                    ++delta;
-                }
-                // update cluster
-                points_list[i].cluster = cluster_id;
-                points_list[i].distance = path_min;
-                centroids_list[cluster_id].sum_px += (points_list[i].x);
-                centroids_list[cluster_id].sum_py += (points_list[i].y);
-                centroids_list[cluster_id].count += 1;
-            }
-        }
-        //printf ("get the nearest centroids\n");
-        // update centroids based on each mean value
-        for (int i = 0; i < clusters; ++i)
-        {
-            int meanx = centroids_list[i].sum_px / centroids_list[i].count;
-            int meany = centroids_list[i].sum_py / centroids_list[i].count;
-            centroids_list[i].prevx = centroids_list[i].x;
-            centroids_list[i].prevy = centroids_list[i].y;
-            centroids_list[i].x = meanx;
-            centroids_list[i].y = meany;
-            centroids_list[i].count = 0;
-            centroids_list[i].sum_px = 0;
-            centroids_list[i].sum_py = 0;
-        }
-        //printf ("compare the nearest centroids\n");
-        // compare nearest centroids and check convergence
-        convergence = compute_convergence (centroids_list, clusters);
-        // check convergence
-        ++curr_iters;
-        delta /= num_points;
-        //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
+        // for (int i = 0; i < num_points; ++i)
+        // {
+        //     float  path_min = 0;
+        //     float  path_curr;
+        //     int cluster_id = 0;
+        //     for (int j = 0; j < clusters; ++j)
+        //     {
+        //         path_curr = compute_distance(points_list[i], centroids_list[j]);
+        //         if (path_min == 0 || path_curr < path_min)
+        //         {
+        //             path_min = path_curr;
+        //             cluster_id = j;
+        //             ++delta;
+        //         }
+        //         // update cluster
+        //         points_list[i].cluster = cluster_id;
+        //         points_list[i].distance = path_min;
+        //         centroids_list[cluster_id].sum_px += (points_list[i].x);
+        //         centroids_list[cluster_id].sum_py += (points_list[i].y);
+        //         centroids_list[cluster_id].count += 1;
+        //     }
+        // }
+        // //printf ("get the nearest centroids\n");
+        // // update centroids based on each mean value
+        // for (int i = 0; i < clusters; ++i)
+        // {
+        //     int meanx = centroids_list[i].sum_px / centroids_list[i].count;
+        //     int meany = centroids_list[i].sum_py / centroids_list[i].count;
+        //     centroids_list[i].prevx = centroids_list[i].x;
+        //     centroids_list[i].prevy = centroids_list[i].y;
+        //     centroids_list[i].x = meanx;
+        //     centroids_list[i].y = meany;
+        //     centroids_list[i].count = 0;
+        //     centroids_list[i].sum_px = 0;
+        //     centroids_list[i].sum_py = 0;
+        // }
+        // //printf ("compare the nearest centroids\n");
+        // // compare nearest centroids and check convergence
+        // convergence = compute_convergence (centroids_list, clusters);
+        // // check convergence
+        // ++curr_iters;
+        // delta /= num_points;
+        // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
     } while ( delta > 0.000001 || curr_iters < 200000);
 
-    return;
+    double endTime = CycleTimer::currentSeconds();
+    double overallDuration = endTime - startTime;
+    return overallDuration;
 }
