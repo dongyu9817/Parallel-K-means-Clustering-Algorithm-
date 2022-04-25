@@ -92,15 +92,15 @@ void write_centroidfile (const char* output_filename, int cluster, centroids_t* 
 int main(int argc, char **argv)
 {
 
-    const char *input_filename ;
-    int clusters;
-    const char *output_filename;
-    const char *output_centroid_filename;
+    const char *input_filename = NULL;
+    int clusters = 0;
+    const char *output_filename = NULL;
+    const char *output_centroid_filename = NULL;
     //output_centroid_filename
     int num_points;
     points_t* points_list;
     centroids_t* centroids_list;
-    int iterations;
+    int iterations = 20000;
     // Parse commandline options
     int opt;
     static struct option long_options[] = {
@@ -112,10 +112,11 @@ int main(int argc, char **argv)
         {0, 0, 0, 0}
     };
 
-    while ((opt = getopt_long(argc, argv, "f:k:o:c?", long_options, NULL)) != EOF) {
+    while ((opt = getopt_long(argc, argv, "f:k:o:c:?", long_options, NULL)) != EOF) {
         switch (opt) {
         case 'o':
             output_filename = optarg;
+            printf ("output %s", output_filename);
             break;
         case 'f':
             input_filename = optarg;
@@ -141,10 +142,10 @@ int main(int argc, char **argv)
     // int intval = get_option_int("-i", 5); 
 
     int error = 0;
-
-    if (input_filename == NULL)
+    printf ("output %s %s %s ", input_filename,output_filename,  output_centroid_filename);
+    if (input_filename == NULL || output_filename == NULL || output_centroid_filename == NULL )
     {
-        printf("Error: You need to specify -f.\n");
+        printf("Error: Missing Input Parameter.\n");
         error = 1;
     }
 
