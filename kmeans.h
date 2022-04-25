@@ -24,13 +24,19 @@ typedef struct {
     int sum_px;
     int sum_py;
     int count;
-
     //centroids of each iteration untill convergence
 } centroids_t;
 
+typedef struct { 
+    int numpoints; //the number of the datapoints
+    int iterations; //the number of iterations
+    int cluster; //the number of clusters
+    //holds the general set up information of the kmeans algorithm
+} metaInfo_t;
 
 void kmeans_sequential(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
-
+double  kmeans_cuda(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
+    
 const char *get_option_string(const char *option_name, const char *default_value);
 int get_option_int(const char *option_name, int default_value);
 float get_option_float(const char *option_name, float default_value);

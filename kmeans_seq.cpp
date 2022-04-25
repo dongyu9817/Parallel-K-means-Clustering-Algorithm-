@@ -62,7 +62,7 @@ void kmeans_sequential(int *n_points, int clusters, points_t **p_list, centroids
     // update stage
     int convergence = 0;
     int curr_iters =0;
-    double detla;
+    double delta = 0.0;
     do
     {
         delta = 0.0;
@@ -109,9 +109,9 @@ void kmeans_sequential(int *n_points, int clusters, points_t **p_list, centroids
         // check convergence
         ++curr_iters;
         delta /= num_points;
-        //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
+        //printf ("new the nearest centroids %d\n", curr_iters );
 
-    } while ( delta > 0.000001 || curr_iters < 200000);
+    } while (delta > 0.000001 && curr_iters < 2000000);
 
     return;
 }

@@ -116,7 +116,6 @@ int main(int argc, char **argv)
         switch (opt) {
         case 'o':
             output_filename = optarg;
-            printf ("output %s", output_filename);
             break;
         case 'f':
             input_filename = optarg;
@@ -142,7 +141,7 @@ int main(int argc, char **argv)
     // int intval = get_option_int("-i", 5); 
 
     int error = 0;
-    printf ("output %s %s %s ", input_filename,output_filename,  output_centroid_filename);
+   
     if (input_filename == NULL || output_filename == NULL || output_centroid_filename == NULL )
     {
         printf("Error: Missing Input Parameter.\n");

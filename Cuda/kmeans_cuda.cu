@@ -56,7 +56,7 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     float path_curr;
     for (int j = 0; j < clusters; ++j)
     {
-        path_curr = compute_distance(gpu_points_list[dataid], gpu_centroids_list[dataid]);
+        path_curr = compute_distance(gpu_points_list[dataid], gpu_centroids_list[j]);
         if (path_min == 0 || path_curr < path_min)
         {
             path_min = path_curr;
@@ -65,7 +65,7 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     }
     gpu_points_list[dataid].cluster = cluster_id;
     gpu_points_list[dataid].distance = path_min;
-
+    //printf ("val id %d changes from %d to %d\n", dataid, gpu_points_list[dataid].cluster, gpu_points_list[dataid].distance);
     // use reduction function to get sum of point's cluster change in each block
     extern __shared__ int shared_blockpoints_change[];
     // initialize reduction array
@@ -91,6 +91,8 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     }
     return;
 }
+
+
 __global__ static void find_change_reduction(int *pBlock_changes, int block_size, int blocks_roundedsize)
 {
     extern __shared__ unsigned int shared_reduce[];
@@ -177,26 +179,30 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     int cluster_id = 0;
     float delta = 0.0;
     double startTime = CycleTimer::currentSeconds();
-
+    
     do
     {
         // get the nearest centroids
         findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes);
-        cudaDeviceSynchronize();
-
+        //cudaDeviceSynchronize();
+        
         cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost); // for (int i = 0; i < num_points; ++i)
 
         // update cluster, sum all points in each cluster
         for (int i = 0; i < num_points; ++i)
         {
+            
             cluster_id = points_list[i].cluster;
+            //printf ("centroids_list data on gpu % d\n", cluster_id);
             centroids_list[cluster_id].sum_px += (points_list[i].x);
             centroids_list[cluster_id].sum_py += (points_list[i].y);
             centroids_list[cluster_id].count += 1;
         }
+        
         // compute new centroid points based on arithmetic mean
         for (int i = 0; i < clusters; ++i)
         {
+            //printf ("findNearnestNeighbor data on gpu % d\n", centroids_list[i].count);
             int meanx = centroids_list[i].sum_px / centroids_list[i].count;
             int meany = centroids_list[i].sum_py / centroids_list[i].count;
             centroids_list[i].prevx = centroids_list[i].x;
@@ -212,15 +218,13 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
         // block change array sums the number of points change cluster in that block
         cudaDeviceSynchronize();
         cudaMemcpy(&threshold_change, pBlock_changes, sizeof(int), cudaMemcpyDeviceToHost);
-        // //printf ("get the nearest centroids\n");
         // check convergence
         ++curr_iters; 
         delta = (float) threshold_change / num_points;
-        // //printf ("compare the nearest centroids\n");
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
-    } while (delta > 0.000001 || curr_iters < 20000);
+    } while (delta > 0.000001 && curr_iters < 200000);
 
     double endTime = CycleTimer::currentSeconds();
     double overallDuration = endTime - startTime;
