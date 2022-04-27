@@ -69,7 +69,10 @@ __host__ __device__ inline static float compute_centroid_distance(centroids_t ce
     return sqrt(pow(xdiff, 2) + pow(ydiff, 2));
 }
 
-__global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids_t *gpu_centroids_list, metaInfo_t *gpu_metadata, int *pBlock_changes)
+/**
+ * GPU function which is used to find the nearnest centroid of a given data point
+ **/
+__global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids_t *gpu_centroids_list, metaInfo_t *gpu_metadata, int *pBlock_changes, float*gpu_icd_matrix, int* gpu_rid_matrix)
 {
     // gpu find the nearnest neighbor parallel function
     // each thread is responsible for one datapoint
@@ -78,19 +81,33 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     int dataid = blockDim.x * blockIdx.x + threadIdx.x;
     if (dataid > numPoints)
         return;
+    
     float path_min = 0;
     int org_cluster_id = gpu_points_list[dataid].cluster;
+    int org_dist = compute_distance(gpu_points_list[dataid], 
+    gpu_centroids_list[org_cluster_id]);
+    int new_cluster_id = org_cluster_id;
     int cluster_id = 0;
+    int curCnt =0;
     float path_curr;
-    for (int j = 0; j < clusters; ++j)
+
+    int old_cindex = org_cluster_id*clusters;
+    for (int j = 1; j < clusters; ++j)
     {
-        path_curr = compute_distance(gpu_points_list[dataid], gpu_centroids_list[j]);
+        curCnt = gpu_rid_matrix[old_cindex + j];
+        if (gpu_icd_matrix[old_cindex + curCnt] > 2 * org_dist) {
+            break;
+        }
+        //failed on triangle inequalities, continue to orginal calculation of distance
+        path_curr = compute_distance(gpu_points_list[dataid], gpu_centroids_list[curCnt]);
+
         if (path_min == 0 || path_curr < path_min)
         {
             path_min = path_curr;
-            cluster_id = j;
+            cluster_id = curCnt;
         }
     }
+    //assign updated label centroid to the data point 
     gpu_points_list[dataid].cluster = cluster_id;
     gpu_points_list[dataid].distance = path_min;
     // printf ("val id %d changes from %d to %d\n", dataid, gpu_points_list[dataid].cluster, gpu_points_list[dataid].distance);
@@ -180,6 +197,7 @@ int compare(const void *vala, const void *valb)
  * Initialize the RID matrix to store storing results of distances from small to large
  **/
 void build_RID_matrix(float* icd_matrix, int* rid_matrix, int cluster) {
+        // RID another k × k matrix,where each row is a permutation of 1, 2, · · · k representing the closeness of the distances from Ci to other centroids
     for (int i =0; i < cluster; ++i) {
         //for each row, create a 2d array to store icd value and its index
         float temp [cluster][2];
@@ -229,31 +247,40 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
         centroids_list[i].count = 0;
     }
 
+    // two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step.
+
     // build ICD matrix, store distance between two centroids
-    float icd_matrix[clusters][clusters];
+    float icd_matrix[clusters*clusters];
     build_ICD_matrix (&icd_matrix, clusters, centroids_list);
     // sort each row of the ICD matrix to derive the ranked index (RID) matrix
-    int rid_matrix[clusters][clusters];
+    int rid_matrix[clusters*clusters];
     build_RID_matrix (&icd_matrix, &rid_matrix, clusters);
-    
-    // RID another k × k matrix,where each row is a permutation of 1, 2, · · · k representing the closeness of the distances from Ci to other centroids
-
-    // two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step.
 
     // device data on gpu
     points_t *gpu_points_list;
     centroids_t *gpu_centroids_list = *c_list;
     metaInfo_t *gpu_metaData;
+    float *gpu_icd_matrix;
+    int *gpu_rid_matrix;
 
+    //Copy {C1...k}, ICD, and RID to GPU device
     // Copy data from device to GPU
+    int matrixSize = cluster * cluster;
     cudaMalloc(&gpu_points_list, num_points * sizeof(points_t));
     cudaMalloc(&gpu_centroids_list, sizeof(centroids_t) * clusters);
+    cudaMalloc(&gpu_icd_matrix, sizeof(float) * matrixSize);
+    cudaMalloc(&gpu_rid_matrix, sizeof(int) * matrixSize);
     cudaMalloc(&gpu_metaData, sizeof(metaInfo_t));
+
+
     cudaMemcpy(gpu_points_list, points_list, num_points * sizeof(points_t), cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_metaData, metaData, sizeof(metaInfo_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_icd_matrix, &icd_matrix, sizeof(float) * matrixSize, cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_rid_matrix, &rid_matrix, sizeof(int) * matrixSize, cudaMemcpyHostToDevice);
 
     // initialize CUDA constants
+    //labeling n data points are distributed to a total number of GridSize × BlockSize threads, so each thread is responsible for a subset of t = dn/GridSize/BlockSizee
     const unsigned int blocks = (num_points + threadPerBlock - 1) / threadPerBlock;
     const unsigned int blocks_rounded = FindNextPower2(blocks);
     // initialize cluster shared date for each block
@@ -281,7 +308,7 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
         // 6. find the mean for clusters and update centroids
 
         // get the nearest centroids
-        findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes);
+        findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes, gpu_icd_matrix, gpu_rid_matrix);
         // cudaDeviceSynchronize();
 
         cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost); // for (int i = 0; i < num_points; ++i)
