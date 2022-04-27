@@ -37,7 +37,10 @@ static inline int FindNextPower2(int num)
     return num;
 }
 
-__host__ __device__ inline static float compute_distance(points_t point, centroids_t centroid)
+/**
+ * Find the euclidean distance betwen a datapoint and a centroid 
+ **/
+__host__ __device__ inline static float compute_point_distance(points_t point, centroids_t centroid)
 {
     int px = point.x;
     int py = point.y;
@@ -46,6 +49,22 @@ __host__ __device__ inline static float compute_distance(points_t point, centroi
 
     float xdiff = px - cx;
     float ydiff = py - cy;
+
+    return sqrt(pow(xdiff, 2) + pow(ydiff, 2));
+}
+
+/**
+ * Find the euclidean distance between two centroids
+ **/
+__host__ __device__ inline static float compute_centroid_distance(centroids_t centroid1, centroids_t centroid2)
+{
+    int cx2 = centroid2.x;
+    int cy2 = centroid2.y;
+    int cx1 = centroid1.x;
+    int cy1 = centroid1.y;
+
+    float xdiff = cx2 - cx1;
+    float ydiff = cy2 - cy1;
 
     return sqrt(pow(xdiff, 2) + pow(ydiff, 2));
 }
@@ -130,6 +149,58 @@ __global__ static void find_change_reduction(int *pBlock_changes, int block_size
     return;
 }
 
+/**
+ * Initialize the ICD matrix to store distances between two centroids.
+ **/
+void build_ICD_matrix (float* icd_matrix, int cluster, centroids_t *c_list) {
+    //icd is a k × k matrix storing the distances between every two centroids
+    int c1 =0;
+    int c2 =0;
+    for (c1 =0; c1 < cluster; ++c1) {
+        for (c2 =0; c2 < cluster; ++c2) {
+            int index = c1*cluster + c2;
+            double dist = compute_centroid_distance(c_list[c1],c_list[c2] );
+            icd_matrix[index] = dist;
+        }
+    }
+}
+
+
+int compare(const void *vala, const void *valb)
+{
+	const int *a = (const int *)vala;
+	const int *b = (const int *)valb;
+	if (a[0] == b[0])
+		return a[1] - b[1];
+	else
+		return a[0] - b[0];
+}
+
+/**
+ * Initialize the RID matrix to store storing results of distances from small to large
+ **/
+void build_RID_matrix(float* icd_matrix, int* rid_matrix, int cluster) {
+    for (int i =0; i < cluster; ++i) {
+        //for each row, create a 2d array to store icd value and its index
+        float temp [cluster][2];
+        int index = i *cluster;
+        for (int j =0; j < cluster; ++j) {
+            temp[j][0] =  icd_matrix[index+j];
+            temp[j][1] = j;
+        }
+        qsort (temp, clusters, sizeof(*temp), compare);
+        //copy sorted centroid index to rid matrix
+        for (int j =0; j < cluster; ++j) {
+            int sortedindex = temp[j][1];
+            rid_matrix[index+j] = sortedindex;
+        }
+    }
+}
+
+
+/**
+ * Main function of cuda kmeans algorithm, called from main.cpp
+ **/
 double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
 {
     // host data
@@ -145,15 +216,6 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
 
     // randomly pick centroid based on the cluster number
     // get the initial centroids
-
-    // build ICD matrix, a k × k matrix storing the distances between every two centroids
-
-    // sort each row of the ICD matrix to derive the ranked index (RID) matrix
-
-    // RID another k × k matrix,where each row is a permutation of 1, 2, · · · k representing the closeness of the distances from Ci to other centroids
-
-    // two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step.
-
     srand(time(0));
     for (int i = 0; i < clusters; ++i)
     {
@@ -166,6 +228,17 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
         centroids_list[i].sum_py = 0;
         centroids_list[i].count = 0;
     }
+
+    // build ICD matrix, store distance between two centroids
+    float icd_matrix[clusters][clusters];
+    build_ICD_matrix (&icd_matrix, clusters, centroids_list);
+    // sort each row of the ICD matrix to derive the ranked index (RID) matrix
+    int rid_matrix[clusters][clusters];
+    build_RID_matrix (&icd_matrix, &rid_matrix, clusters);
+    
+    // RID another k × k matrix,where each row is a permutation of 1, 2, · · · k representing the closeness of the distances from Ci to other centroids
+
+    // two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step.
 
     // device data on gpu
     points_t *gpu_points_list;
