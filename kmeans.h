@@ -36,7 +36,8 @@ typedef struct {
 
 void kmeans_sequential(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
 double  kmeans_cuda(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
-    
+double  kmeans_cuda_triangle_ineq(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
+
 const char *get_option_string(const char *option_name, const char *default_value);
 int get_option_int(const char *option_name, int default_value);
 float get_option_float(const char *option_name, float default_value);
