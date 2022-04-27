@@ -38,7 +38,7 @@ static inline int FindNextPower2(int num)
 }
 
 /**
- * Find the euclidean distance betwen a datapoint and a centroid 
+ * Find the euclidean distance betwen a datapoint and a centroid
  **/
 __host__ __device__ inline static float compute_point_distance(points_t point, centroids_t centroid)
 {
@@ -72,7 +72,7 @@ __host__ __device__ inline static float compute_centroid_distance(centroids_t ce
 /**
  * GPU function which is used to find the nearnest centroid of a given data point
  **/
-__global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids_t *gpu_centroids_list, metaInfo_t *gpu_metadata, int *pBlock_changes, float*gpu_icd_matrix, int* gpu_rid_matrix)
+__global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids_t *gpu_centroids_list, metaInfo_t *gpu_metadata, int *pBlock_changes, float *gpu_icd_matrix, int *gpu_rid_matrix)
 {
     // gpu find the nearnest neighbor parallel function
     // each thread is responsible for one datapoint
@@ -81,25 +81,25 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     int dataid = blockDim.x * blockIdx.x + threadIdx.x;
     if (dataid > numPoints)
         return;
-    
+
     float path_min = 0;
     int org_cluster_id = gpu_points_list[dataid].cluster;
-    int org_dist = compute_distance(gpu_points_list[dataid], 
-    gpu_centroids_list[org_cluster_id]);
-    int new_cluster_id = org_cluster_id;
-    int cluster_id = 0;
-    int curCnt =0;
+    int org_dist = compute_point_distance(gpu_points_list[dataid],
+                                          gpu_centroids_list[org_cluster_id]);
+    int cluster_id = org_cluster_id;
+    int curCnt = 0;
     float path_curr;
 
-    int old_cindex = org_cluster_id*clusters;
+    int old_cindex = org_cluster_id * clusters;
     for (int j = 1; j < clusters; ++j)
     {
         curCnt = gpu_rid_matrix[old_cindex + j];
-        if (gpu_icd_matrix[old_cindex + curCnt] > 2 * org_dist) {
+        if (gpu_icd_matrix[old_cindex + curCnt] > 2 * org_dist)
+        {
             break;
         }
-        //failed on triangle inequalities, continue to orginal calculation of distance
-        path_curr = compute_distance(gpu_points_list[dataid], gpu_centroids_list[curCnt]);
+        // failed on triangle inequalities, continue to orginal calculation of distance
+        path_curr = compute_point_distance(gpu_points_list[dataid], gpu_centroids_list[curCnt]);
 
         if (path_min == 0 || path_curr < path_min)
         {
@@ -107,7 +107,7 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
             cluster_id = curCnt;
         }
     }
-    //assign updated label centroid to the data point 
+    // assign updated label centroid to the data point
     gpu_points_list[dataid].cluster = cluster_id;
     gpu_points_list[dataid].distance = path_min;
     // printf ("val id %d changes from %d to %d\n", dataid, gpu_points_list[dataid].cluster, gpu_points_list[dataid].distance);
@@ -169,57 +169,62 @@ __global__ static void find_change_reduction(int *pBlock_changes, int block_size
 /**
  * Initialize the ICD matrix to store distances between two centroids.
  **/
-void build_ICD_matrix (float* icd_matrix, int cluster, centroids_t *c_list) {
-    //icd is a k × k matrix storing the distances between every two centroids
-    int c1 =0;
-    int c2 =0;
-    for (c1 =0; c1 < cluster; ++c1) {
-        for (c2 =0; c2 < cluster; ++c2) {
-            int index = c1*cluster + c2;
-            double dist = compute_centroid_distance(c_list[c1],c_list[c2] );
+void build_ICD_matrix(float *icd_matrix, int cluster, centroids_t *c_list)
+{
+    // icd is a k × k matrix storing the distances between every two centroids
+    int c1 = 0;
+    int c2 = 0;
+    for (c1 = 0; c1 < cluster; ++c1)
+    {
+        for (c2 = 0; c2 < cluster; ++c2)
+        {
+            int index = c1 * cluster + c2;
+            double dist = compute_centroid_distance(c_list[c1], c_list[c2]);
             icd_matrix[index] = dist;
         }
     }
 }
 
-
 int compare(const void *vala, const void *valb)
 {
-	const int *a = (const int *)vala;
-	const int *b = (const int *)valb;
-	if (a[0] == b[0])
-		return a[1] - b[1];
-	else
-		return a[0] - b[0];
+    const int *a = (const int *)vala;
+    const int *b = (const int *)valb;
+    if (a[0] == b[0])
+        return a[1] - b[1];
+    else
+        return a[0] - b[0];
 }
 
 /**
  * Initialize the RID matrix to store storing results of distances from small to large
  **/
-void build_RID_matrix(float* icd_matrix, int* rid_matrix, int cluster) {
-        // RID another k × k matrix,where each row is a permutation of 1, 2, · · · k representing the closeness of the distances from Ci to other centroids
-    for (int i =0; i < cluster; ++i) {
-        //for each row, create a 2d array to store icd value and its index
-        float temp [cluster][2];
-        int index = i *cluster;
-        for (int j =0; j < cluster; ++j) {
-            temp[j][0] =  icd_matrix[index+j];
+void build_RID_matrix(float *icd_matrix, int *rid_matrix, int cluster)
+{
+    // RID another k × k matrix,where each row is a permutation of 1, 2, · · · k representing the closeness of the distances from Ci to other centroids
+    for (int i = 0; i < cluster; ++i)
+    {
+        // for each row, create a 2d array to store icd value and its index
+        float temp[cluster][2];
+        int index = i * cluster;
+        for (int j = 0; j < cluster; ++j)
+        {
+            temp[j][0] = icd_matrix[index + j];
             temp[j][1] = j;
         }
-        qsort (temp, clusters, sizeof(*temp), compare);
-        //copy sorted centroid index to rid matrix
-        for (int j =0; j < cluster; ++j) {
+        qsort(temp, cluster, sizeof(*temp), compare);
+        // copy sorted centroid index to rid matrix
+        for (int j = 0; j < cluster; ++j)
+        {
             int sortedindex = temp[j][1];
-            rid_matrix[index+j] = sortedindex;
+            rid_matrix[index + j] = sortedindex;
         }
     }
 }
 
-
 /**
  * Main function of cuda kmeans algorithm, called from main.cpp
  **/
-double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
+double kmeans_cuda_triangle_ineq(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
 {
     // host data
     points_t *points_list = *p_list;
@@ -232,6 +237,10 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     metaData->iterations = iterations;
     metaData->cluster = clusters;
 
+    // icd and rid matrix, used for triangle inequalities
+    int matrixSize = clusters * clusters;
+    float *icd_matrix = (float *)calloc(matrixSize, sizeof(float));
+    int *rid_matrix = (int *)calloc(matrixSize, sizeof(int));
     // randomly pick centroid based on the cluster number
     // get the initial centroids
     srand(time(0));
@@ -249,13 +258,6 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
 
     // two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step.
 
-    // build ICD matrix, store distance between two centroids
-    float icd_matrix[clusters*clusters];
-    build_ICD_matrix (&icd_matrix, clusters, centroids_list);
-    // sort each row of the ICD matrix to derive the ranked index (RID) matrix
-    int rid_matrix[clusters*clusters];
-    build_RID_matrix (&icd_matrix, &rid_matrix, clusters);
-
     // device data on gpu
     points_t *gpu_points_list;
     centroids_t *gpu_centroids_list = *c_list;
@@ -263,24 +265,21 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     float *gpu_icd_matrix;
     int *gpu_rid_matrix;
 
-    //Copy {C1...k}, ICD, and RID to GPU device
-    // Copy data from device to GPU
-    int matrixSize = cluster * cluster;
+    // Copy {C1...k}, ICD, and RID to GPU device
+    //  Copy data from device to GPU
+
     cudaMalloc(&gpu_points_list, num_points * sizeof(points_t));
     cudaMalloc(&gpu_centroids_list, sizeof(centroids_t) * clusters);
     cudaMalloc(&gpu_icd_matrix, sizeof(float) * matrixSize);
     cudaMalloc(&gpu_rid_matrix, sizeof(int) * matrixSize);
     cudaMalloc(&gpu_metaData, sizeof(metaInfo_t));
 
-
     cudaMemcpy(gpu_points_list, points_list, num_points * sizeof(points_t), cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice);
     cudaMemcpy(gpu_metaData, metaData, sizeof(metaInfo_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_icd_matrix, &icd_matrix, sizeof(float) * matrixSize, cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_rid_matrix, &rid_matrix, sizeof(int) * matrixSize, cudaMemcpyHostToDevice);
 
     // initialize CUDA constants
-    //labeling n data points are distributed to a total number of GridSize × BlockSize threads, so each thread is responsible for a subset of t = dn/GridSize/BlockSizee
+    // labeling n data points are distributed to a total number of GridSize × BlockSize threads, so each thread is responsible for a subset of t = dn/GridSize/BlockSizee
     const unsigned int blocks = (num_points + threadPerBlock - 1) / threadPerBlock;
     const unsigned int blocks_rounded = FindNextPower2(blocks);
     // initialize cluster shared date for each block
@@ -300,18 +299,21 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     do
     {
         // point label process:
-        // 1. find ICD
-        // 2. find RID
+        // build ICD matrix, store distance between two centroids
+        build_ICD_matrix(icd_matrix, clusters, centroids_list);
+        // sort each row of the ICD matrix to derive the ranked index (RID) matrix
+        build_RID_matrix(icd_matrix, rid_matrix, clusters);
         // 3. copy the matrixes to GPU device
+        cudaMemcpy(gpu_icd_matrix, &icd_matrix, sizeof(float) * matrixSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(gpu_rid_matrix, &rid_matrix, sizeof(int) * matrixSize, cudaMemcpyHostToDevice);
         // 4. for point Px that was labeled to centroid i, loop through the centrouds following sorted sequence in the ith row of RID matrix.
-        // 5. copy back host
-        // 6. find the mean for clusters and update centroids
-
         // get the nearest centroids
         findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes, gpu_icd_matrix, gpu_rid_matrix);
-        // cudaDeviceSynchronize();
 
-        cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost); // for (int i = 0; i < num_points; ++i)
+        // 5. copy back host
+        cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost);
+
+        // 6. find the mean for clusters and update centroids
 
         // update cluster, sum all points in each cluster
         for (int i = 0; i < num_points; ++i)
@@ -338,6 +340,7 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
             centroids_list[i].sum_px = 0;
             centroids_list[i].sum_py = 0;
         }
+
         // find delta, will compared with threshold in the while condition
         find_change_reduction<<<1, blocks_rounded, blocks_sharedInfo_reduced>>>(pBlock_changes, blocks, blocks_rounded);
         // block change array sums the number of points change cluster in that block
