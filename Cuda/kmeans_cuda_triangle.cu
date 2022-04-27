@@ -1,12 +1,16 @@
 /**
  * Cuda K-means cluster Algorithm
  * Yu Dong (Yu Dong)
- * This is a general CUDA algorithm of a standard k-means iteration with the input data points {P1...n} s
+ * This is a CUDA-based inequality reinforced k-means algorithm
+ * This algorithm can achieve better load balanced by reducing distance calculations.
  * The basic idea of this algorithm is:
- * 1: Copy {C1...k} to GPU device
- * 2: Launch the GPU kernel to label {P1...n} to the nearest centroids
- * 3: Copy {L1...n} back to host
- * 4: Calculate the mean for each cluster and update {C1...k}
+ * 1: Calculate inter-centroid distances (ICD) matrix
+ * 2: Sort each row of the ICD matrix to derive the ranked index (RID) matrix
+ * 3: Copy {C1...k}, ICD, and RID to GPU device
+ * 4: Launch the GPU kernel to label {P1...n} to the nearest
+ * centroids with the help of ICD, RID, and triangle inequalities
+ * 5: Copy {L1...n} back to host
+ * 6: Calculate the mean for each cluster and update {C1...k}
  */
 #include "../kmeans.h"
 
@@ -70,8 +74,8 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     }
     gpu_points_list[dataid].cluster = cluster_id;
     gpu_points_list[dataid].distance = path_min;
-    //printf ("val id %d changes from %d to %d\n", dataid, gpu_points_list[dataid].cluster, gpu_points_list[dataid].distance);
-    // use reduction function to get sum of point's cluster change in each block
+    // printf ("val id %d changes from %d to %d\n", dataid, gpu_points_list[dataid].cluster, gpu_points_list[dataid].distance);
+    //  use reduction function to get sum of point's cluster change in each block
     extern __shared__ int shared_blockpoints_change[];
     // initialize reduction array
     shared_blockpoints_change[threadIdx.x] = 0;
@@ -96,7 +100,6 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     }
     return;
 }
-
 
 __global__ static void find_change_reduction(int *pBlock_changes, int block_size, int blocks_roundedsize)
 {
@@ -132,7 +135,7 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     // host data
     points_t *points_list = *p_list;
     int num_points = *n_points;
-    int  threshold_change = 0;
+    int threshold_change = 0;
     *c_list = (centroids_t *)malloc(sizeof(centroids_t) * clusters);
     centroids_t *centroids_list = *c_list;
     metaInfo_t *metaData = (metaInfo_t *)malloc(sizeof(metaInfo_t));
@@ -142,6 +145,15 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
 
     // randomly pick centroid based on the cluster number
     // get the initial centroids
+
+    // build ICD matrix, a k × k matrix storing the distances between every two centroids
+
+    // sort each row of the ICD matrix to derive the ranked index (RID) matrix
+
+    // RID another k × k matrix,where each row is a permutation of 1, 2, · · · k representing the closeness of the distances from Ci to other centroids
+
+    // two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step.
+
     srand(time(0));
     for (int i = 0; i < clusters; ++i)
     {
@@ -184,30 +196,38 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     int cluster_id = 0;
     float delta = 0.0;
     double startTime = CycleTimer::currentSeconds();
-    
+
     do
     {
+        // point label process:
+        // 1. find ICD
+        // 2. find RID
+        // 3. copy the matrixes to GPU device
+        // 4. for point Px that was labeled to centroid i, loop through the centrouds following sorted sequence in the ith row of RID matrix.
+        // 5. copy back host
+        // 6. find the mean for clusters and update centroids
+
         // get the nearest centroids
         findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes);
-        //cudaDeviceSynchronize();
-        
+        // cudaDeviceSynchronize();
+
         cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost); // for (int i = 0; i < num_points; ++i)
 
         // update cluster, sum all points in each cluster
         for (int i = 0; i < num_points; ++i)
         {
-            
+
             cluster_id = points_list[i].cluster;
-            //printf ("centroids_list data on gpu % d\n", cluster_id);
+            // printf ("centroids_list data on gpu % d\n", cluster_id);
             centroids_list[cluster_id].sum_px += (points_list[i].x);
             centroids_list[cluster_id].sum_py += (points_list[i].y);
             centroids_list[cluster_id].count += 1;
         }
-        
+
         // compute new centroid points based on arithmetic mean
         for (int i = 0; i < clusters; ++i)
         {
-            //printf ("findNearnestNeighbor data on gpu % d\n", centroids_list[i].count);
+            // printf ("findNearnestNeighbor data on gpu % d\n", centroids_list[i].count);
             int meanx = centroids_list[i].sum_px / centroids_list[i].count;
             int meany = centroids_list[i].sum_py / centroids_list[i].count;
             centroids_list[i].prevx = centroids_list[i].x;
@@ -224,8 +244,8 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
         cudaDeviceSynchronize();
         cudaMemcpy(&threshold_change, pBlock_changes, sizeof(int), cudaMemcpyDeviceToHost);
         // check convergence
-        ++curr_iters; 
-        delta = (float) threshold_change / num_points;
+        ++curr_iters;
+        delta = (float)threshold_change / num_points;
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
