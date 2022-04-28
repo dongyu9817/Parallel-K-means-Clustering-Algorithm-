@@ -229,7 +229,7 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
-    } while (delta > 0.000001 && curr_iters < 200000);
+    }while (delta > 0.000001 && curr_iters < 200000);
 
     double endTime = CycleTimer::currentSeconds();
     double overallDuration = endTime - startTime;

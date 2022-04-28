@@ -110,7 +110,7 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
     // assign updated label centroid to the data point
     gpu_points_list[dataid].cluster = cluster_id;
     gpu_points_list[dataid].distance = path_min;
-    // printf ("val id %d changes from %d to %d\n", dataid, gpu_points_list[dataid].cluster, gpu_points_list[dataid].distance);
+    //printf ("val id %d changes from %d to %d\n", dataid, org_cluster_id, gpu_points_list[dataid].cluster);
     //  use reduction function to get sum of point's cluster change in each block
     extern __shared__ int shared_blockpoints_change[];
     // initialize reduction array
@@ -294,33 +294,57 @@ double kmeans_cuda_triangle_ineq(int *n_points, int clusters, points_t **p_list,
     int curr_iters = 0;
     int cluster_id = 0;
     float delta = 0.0;
-    double startTime = CycleTimer::currentSeconds();
+    
 
+    double icdtime =0.0;
+    double ridtime =0.0;
+    double copytime =0.0;
+    double findnearest =0.0;
+    double updatecentroid =0.0;
+
+    double startTime = CycleTimer::currentSeconds();
     do
     {
         // point label process:
         // build ICD matrix, store distance between two centroids
+        double s1 = CycleTimer::currentSeconds();
         build_ICD_matrix(icd_matrix, clusters, centroids_list);
+        double e1 = CycleTimer::currentSeconds();
+        icdtime += (e1-s1);
+        
         // sort each row of the ICD matrix to derive the ranked index (RID) matrix
+        double s2 = CycleTimer::currentSeconds();
         build_RID_matrix(icd_matrix, rid_matrix, clusters);
+        double e2 = CycleTimer::currentSeconds();
+        ridtime +=  e2 -s2 ;
+        
+        
         // 3. copy the matrixes to GPU device
-        cudaMemcpy(gpu_icd_matrix, &icd_matrix, sizeof(float) * matrixSize, cudaMemcpyHostToDevice);
-        cudaMemcpy(gpu_rid_matrix, &rid_matrix, sizeof(int) * matrixSize, cudaMemcpyHostToDevice);
+        double s3 = CycleTimer::currentSeconds();
+        cudaMemcpy(gpu_icd_matrix, icd_matrix, sizeof(float) * matrixSize, cudaMemcpyHostToDevice);
+        cudaMemcpy(gpu_rid_matrix, rid_matrix, sizeof(int) * matrixSize, cudaMemcpyHostToDevice);
+        double e3 = CycleTimer::currentSeconds();
+        copytime += e3-s3;
+        
         // 4. for point Px that was labeled to centroid i, loop through the centrouds following sorted sequence in the ith row of RID matrix.
         // get the nearest centroids
+        double s4 = CycleTimer::currentSeconds();
         findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes, gpu_icd_matrix, gpu_rid_matrix);
-
+        
+        //printf ("pass findNearnestNeighbor \n");
         // 5. copy back host
         cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost);
-
+        double e4 = CycleTimer::currentSeconds();
+        
+        findnearest += e4-s4;
         // 6. find the mean for clusters and update centroids
-
+        double s5 = CycleTimer::currentSeconds();
         // update cluster, sum all points in each cluster
         for (int i = 0; i < num_points; ++i)
         {
 
             cluster_id = points_list[i].cluster;
-            // printf ("centroids_list data on gpu % d\n", cluster_id);
+            //printf ("centroids_list data on gpu % d\n", cluster_id);
             centroids_list[cluster_id].sum_px += (points_list[i].x);
             centroids_list[cluster_id].sum_py += (points_list[i].y);
             centroids_list[cluster_id].count += 1;
@@ -340,21 +364,31 @@ double kmeans_cuda_triangle_ineq(int *n_points, int clusters, points_t **p_list,
             centroids_list[i].sum_px = 0;
             centroids_list[i].sum_py = 0;
         }
-
-        // find delta, will compared with threshold in the while condition
+        double e5 = CycleTimer::currentSeconds();
+        updatecentroid += e5-s5;
+        
+        //find delta, will compared with threshold in the while condition
         find_change_reduction<<<1, blocks_rounded, blocks_sharedInfo_reduced>>>(pBlock_changes, blocks, blocks_rounded);
         // block change array sums the number of points change cluster in that block
         cudaDeviceSynchronize();
         cudaMemcpy(&threshold_change, pBlock_changes, sizeof(int), cudaMemcpyDeviceToHost);
         // check convergence
-        ++curr_iters;
+        
         delta = (float)threshold_change / num_points;
+
+        ++curr_iters;
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
-    } while (delta > 0.000001 && curr_iters < 200000);
-
+    } while(delta > 0.000001 && curr_iters < 2000);
     double endTime = CycleTimer::currentSeconds();
+    printf ("pass icd time %.3f \n", icdtime);
+    printf ("pass rid time %.3f \n", ridtime );
+    printf ("pass copy time %.3f \n", copytime);
+    printf ("pass find nearest centroid time %.3f \n", findnearest );
+    printf ("pass updated centroid time %.3f \n", updatecentroid);
+    //delta > 0.000001 && 
+    
     double overallDuration = endTime - startTime;
     return overallDuration;
 }

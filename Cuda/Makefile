@@ -1,4 +1,4 @@
-EXECUTABLE := kmeans_cuda_triangle
+EXECUTABLE := kmeans_cuda 
 
 CU_FILES   := kmeans_cuda_triangle.cu
 

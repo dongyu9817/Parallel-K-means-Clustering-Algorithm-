@@ -43,7 +43,7 @@ void read_inputfile (const char* input_filename, int* num_points, points_t** poi
         fscanf(input, "%d %d\n", &xval, &yval);
         (*points_list + i)->x = xval;
         (*points_list + i)->y = yval;
-        (*points_list + i)->cluster = -1;
+        (*points_list + i)->cluster = 0;
     }
     
     fclose (input);
@@ -163,10 +163,15 @@ int main(int argc, char **argv)
 
     //cuda computation
 
-    double gpu_time = kmeans_cuda_triangle_ineq(&num_points, clusters, &points_list, &centroids_list,  iterations);
-    cudaTime = std::min(cudaTime, gpu_time);
+    // double gpu_time = kmeans_cuda(&num_points, clusters, &points_list, &centroids_list,  iterations);
+    // cudaTime = std::min(cudaTime, gpu_time);
    
-    printf("GPU_time: %.3f ms\n", 1000.f * cudaTime);
+    // printf("GPU_time for simple cuda: %.3f ms\n", 1000.f * cudaTime);
+
+    double gpu_time2 = kmeans_cuda_triangle_ineq(&num_points, clusters, &points_list, &centroids_list,  iterations);
+    cudaTime = std::min(cudaTime, gpu_time2);
+   
+    printf("GPU_time for kmeans_cuda_triangle_ineq cuda: %.3f ms\n", 1000.f * gpu_time2);
     
     write_outputfile(output_filename, &num_points, points_list);
     write_centroidfile (output_centroid_filename, clusters, centroids_list);
