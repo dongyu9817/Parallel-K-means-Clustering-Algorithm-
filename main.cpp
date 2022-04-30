@@ -175,7 +175,7 @@ int main(int argc, const char *argv[])
     kmeans_sequential(&num_points, clusters, &points_list, &centroids_list,  iterations);
     
     compute_time += duration_cast<dsec>(Clock::now() - compute_start).count();
-    printf("Computation Time: %lf.\n", compute_time);
+    printf("Computation Time: %lf ms.\n", compute_time*1000);
     
     write_outputfile(output_filename, &num_points, points_list);
     write_centroidfile (output_centroid_filename, clusters, centroids_list);
