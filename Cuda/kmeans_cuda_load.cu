@@ -1,10 +1,10 @@
 /**
  * Cuda K-means cluster Algorithm with load balanced
  * Yu Dong (Yu Dong)
- * 
+ *
  * This is an efficient CUDA-based inequality reinforced k-means algorithm
  * This algorithm can achieve better load balanced by reducing distance calculations. The problem of unbalanced workload and the problem of uncoalesced global memory access are adressed.
- * 
+ *
  * The key ideas are to rearrange the processing order according to the workload needed by each data point, and to rearrange the data layout in GPU’s global memory to match the processing order
  **/
 #include "../kmeans.h"
@@ -116,7 +116,7 @@ __global__ static void findDistanceCalculations(points_t *gpu_points_list, centr
     shared_blockpoints_change[threadIdx.x] = 0;
     if (org_cluster_id != cluster_id)
     {
-        shared_blockpoints_change[threadIdx.x] =num_discals;
+        shared_blockpoints_change[threadIdx.x] = num_discals;
     }
     __syncthreads();
 
@@ -135,7 +135,6 @@ __global__ static void findDistanceCalculations(points_t *gpu_points_list, centr
     }
     return;
 }
-
 
 /**
  * GPU function which is used to find the nearnest centroid of a given data point
@@ -293,58 +292,68 @@ void build_RID_matrix(float *icd_matrix, int *rid_matrix, int cluster)
 /**
  * Helper function of the merge sorting algorithm, merge the sorted subarrays
  **/
-void mergeHelper (points_t *points_list, int l, int m, int r) {
-    int sub1_size = m-l+1;
-    int sub2_size = r-m;
+void mergeHelper(points_t *points_list, int l, int m, int r)
+{
+    int sub1_size = m - l + 1;
+    int sub2_size = r - m;
 
-    points_t points_arr1 [sub1_size];
-    points_t points_arr2 [sub1_size];
+    points_t points_arr1[sub1_size];
+    points_t points_arr2[sub1_size];
 
-    for (int i =0; i < sub1_size; ++i) {
+    for (int i = 0; i < sub1_size; ++i)
+    {
         points_arr1[i] = points_list[i];
     }
-    for (int i =0; i < sub2_size; ++i) {
-        points_arr2[i] = points_list[m + 1+ i];
+    for (int i = 0; i < sub2_size; ++i)
+    {
+        points_arr2[i] = points_list[m + 1 + i];
     }
-    //merge the two lists
+    // merge the two lists
     int index_arr1 = 0;
-    int index_arr2 =0;
-    int index_merge =0;
-    while (index_arr1 < sub1_size && index_arr2 < sub2_size) {
-        if (points_arr1[index_arr1] >= points_arr2[index_arr2]) {
+    int index_arr2 = 0;
+    int index_merge = 0;
+    while (index_arr1 < sub1_size && index_arr2 < sub2_size)
+    {
+        if (points_arr1[index_arr1].distance >= points_arr2[index_arr2].distance)
+        {
             points_list[index_merge] = points_arr1[index_arr1];
             index_arr1++;
         }
-        else {
+        else
+        {
             points_list[index_merge] = points_arr2[index_arr2];
             index_arr2++;
         }
-        index_merge ++;
+        index_merge++;
     }
-    //copy the remaining left array elements if the first array has remainings
-    while (index_arr1 < sub1_size) {
+    // copy the remaining left array elements if the first array has remainings
+    while (index_arr1 < sub1_size)
+    {
         points_list[index_merge] = points_arr1[index_arr1];
-        index_arr1++; 
-        index_merge ++;
+        index_arr1++;
+        index_merge++;
     }
-    //the second array has remaining elements
-    while (index_arr2 < sub2_size) {
+    // the second array has remaining elements
+    while (index_arr2 < sub2_size)
+    {
         points_list[index_merge] = points_arr2[index_arr2];
-        index_arr2++; 
-        index_merge ++;
+        index_arr2++;
+        index_merge++;
     }
 }
 
 /**
  * Merge sort algorithm to sort the points array based on the number of distance calculations of each point in descending order.
  **/
-void mergeSort (points_t *points_list, int l, int r) {
-    if (l < r) {
-        //get the middle point
-        int m = (r-l)/2 + l;
+void mergeSort(points_t *points_list, int l, int r)
+{
+    if (l < r)
+    {
+        // get the middle point
+        int m = (r - l) / 2 + l;
         mergeSort(points_list, l, m);
-        mergeSort(points_list, m+1, r);
-        mergeHelper (points_list, l, m, r);
+        mergeSort(points_list, m + 1, r);
+        mergeHelper(points_list, l, m, r);
     }
 }
 /**
@@ -362,7 +371,6 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     metaData->numpoints = num_points;
     metaData->iterations = iterations;
     metaData->cluster = clusters;
-
 
     // icd and rid matrix, used for triangle inequalities
     int matrixSize = clusters * clusters;
@@ -421,6 +429,8 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     int curr_iters = 0;
     int cluster_id = 0;
     float delta = 0.0;
+    float var =0.0;
+    float percentage_change = 1.0;
 
     double icdtime = 0.0;
     double ridtime = 0.0;
@@ -429,11 +439,11 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     double updatecentroid = 0.0;
     // Given a set of input data points {P1...n}, let {M1...n} denote the number of distance calculations done for each point in certain k-means iteration
 
-    //divide the algorithm into two epoches
+    // divide the algorithm into two epoches
 
     /** 1. In epoch1, algo3-triangle inequality on GPU is applied. **/
 
-    //repeat algo3 and record the number of distance calculations for each point until its average converges
+    // repeat algo3 and record the number of distance calculations for each point until its average converges
     double ep1_startTime = CycleTimer::currentSeconds();
     do
     {
@@ -459,11 +469,11 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
 
         // 4. for point Px that was labeled to centroid i, loop through the centrouds following sorted sequence in the ith row of RID matrix.
         // get the nearest centroids
-        //store the number of distance calculations in the point parameter distance 
+        // store the number of distance calculations in the point parameter distance
         double s4 = CycleTimer::currentSeconds();
         findDistanceCalculations<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes, gpu_icd_matrix, gpu_rid_matrix);
 
-        // printf ("pass findNearnestNeighbor \n");
+        //printf("pass findNearnestNeighbor \n");
         //  5. copy back host
         cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost);
         double e4 = CycleTimer::currentSeconds();
@@ -476,7 +486,7 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
         {
 
             cluster_id = points_list[i].cluster;
-            // printf ("centroids_list data on gpu % d\n", cluster_id);
+            //printf("centroids_list data on gpu % d\n", cluster_id);
             centroids_list[cluster_id].sum_px += (points_list[i].x);
             centroids_list[cluster_id].sum_py += (points_list[i].y);
             centroids_list[cluster_id].count += 1;
@@ -485,13 +495,26 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
         // compute new centroid points based on arithmetic mean
         for (int i = 0; i < clusters; ++i)
         {
-            // printf ("findNearnestNeighbor data on gpu % d\n", centroids_list[i].count);
-            int meanx = centroids_list[i].sum_px / centroids_list[i].count;
-            int meany = centroids_list[i].sum_py / centroids_list[i].count;
+            //printf("findNearnestNeighbor data on gpu % d\n", centroids_list[i].count);
             centroids_list[i].prevx = centroids_list[i].x;
             centroids_list[i].prevy = centroids_list[i].y;
-            centroids_list[i].x = meanx;
-            centroids_list[i].y = meany;
+
+            if (centroids_list[i].count == 0)
+            {
+                // update to a random selected centroid
+                int index = rand() % num_points;
+                centroids_list[i].x = points_list[index].x;
+                centroids_list[i].y = points_list[index].y;
+            }
+            else
+            {
+                int meanx = centroids_list[i].sum_px / centroids_list[i].count;
+                int meany = centroids_list[i].sum_py / centroids_list[i].count;
+
+                centroids_list[i].x = meanx;
+                centroids_list[i].y = meany;
+            }
+
             centroids_list[i].count = 0;
             centroids_list[i].sum_px = 0;
             centroids_list[i].sum_py = 0;
@@ -505,14 +528,14 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
         cudaDeviceSynchronize();
         cudaMemcpy(&threshold_change, pBlock_changes, sizeof(int), cudaMemcpyDeviceToHost);
         // check convergence
-
-        delta = (float)threshold_change / num_points;
-
+        float old_var = var;
+        var = (float)threshold_change / num_points;
+        percentage_change = abs(var - old_var) / old_var;
         ++curr_iters;
         // convergence = compute_convergence (centroids_list, clusters);
-        // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
-        //exit the epoch 1 computation if the convergence criteria is set as that variation of distance calculations between two consecutive iteration is less than 1%
-    } while (delta > 0.01 );
+        //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
+        // exit the epoch 1 computation if the convergence criteria is set as that variation of distance calculations between two consecutive iteration is less than 1%
+    } while (percentage_change > 0.01);
 
     double ep1_endTime = CycleTimer::currentSeconds();
 
@@ -520,8 +543,8 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     int ep1_iter = curr_iters;
 
     /** Rearrange Points so that M 1-n is in decreasing order. (Points need more iterations of find min distance goes first) **/
-    //using merge sort
-    mergeSort (points_list, 0, num_points-1);
+    // using merge sort
+    mergeSort(points_list, 0, num_points - 1);
 
     /** copy sorted points to GPU. Iteration is complete **/
 
@@ -605,12 +628,12 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
-    } while (delta > 0.000001 && curr_iters < 2000);
+    } while (delta > 0.000001 && curr_iters < 20000);
     double endTime = CycleTimer::currentSeconds();
 
     printf("Epoch 2: Convergence of Centroid Clusters takes %.3f, it takes %d iterations\n", endTime - startTime, curr_iters - ep1_iter);
-    printf("Total convergence iterations: \n", curr_iters );
-    
+    printf("Total convergence iterations: %d \n", curr_iters);
+
     printf("pass icd time %.3f \n", icdtime);
     printf("pass rid time %.3f \n", ridtime);
     printf("pass copy time %.3f \n", copytime);
