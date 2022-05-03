@@ -168,7 +168,7 @@ int main(int argc, char **argv)
    
     // printf("GPU_time for simple cuda: %.3f ms\n", 1000.f * cudaTime);
 
-    double gpu_time2 = kmeans_cuda_triangle_ineq(&num_points, clusters, &points_list, &centroids_list,  iterations);
+    double gpu_time2 = kmeans_cuda_triangle_ineq_loadWithepoch(&num_points, clusters, &points_list, &centroids_list,  iterations);
     cudaTime = std::min(cudaTime, gpu_time2);
    
     printf("GPU_time for kmeans_cuda_triangle_ineq cuda: %.3f ms\n", 1000.f * gpu_time2);
