@@ -188,6 +188,7 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     do
     {
         // get the nearest centroids
+        cudaMemcpy(gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice);
         findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes);
         //cudaDeviceSynchronize();
         
@@ -228,6 +229,7 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
         delta = (float) threshold_change / num_points;
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
+        printf ("curr delta %d %.3f \n", curr_iters, delta);
 
     }while (delta > 0.000001 && curr_iters < 200000);
 

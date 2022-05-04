@@ -372,6 +372,10 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     metaData->iterations = iterations;
     metaData->cluster = clusters;
 
+    for (int i =0; i < 5; ++i) {
+        printf ("yyyid %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[300].x );
+    }
+
     // icd and rid matrix, used for triangle inequalities
     int matrixSize = clusters * clusters;
     float *icd_matrix = (float *)calloc(matrixSize, sizeof(float));
@@ -410,7 +414,7 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     cudaMalloc(&gpu_metaData, sizeof(metaInfo_t));
 
     cudaMemcpy(gpu_points_list, points_list, num_points * sizeof(points_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice);
+    
     cudaMemcpy(gpu_metaData, metaData, sizeof(metaInfo_t), cudaMemcpyHostToDevice);
 
     // initialize CUDA constants
@@ -431,7 +435,7 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     float delta = 0.0;
     float var =0.0;
     float percentage_change = 1.0;
-
+    float delta_diff = 0.0;
     double icdtime = 0.0;
     double ridtime = 0.0;
     double copytime = 0.0;
@@ -445,9 +449,11 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
 
     // repeat algo3 and record the number of distance calculations for each point until its average converges
     double ep1_startTime = CycleTimer::currentSeconds();
+
     do
     {
         // point label process:
+        cudaMemcpy(gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice);
         // build ICD matrix, store distance between two centroids
         double s1 = CycleTimer::currentSeconds();
         build_ICD_matrix(icd_matrix, clusters, centroids_list);
@@ -479,6 +485,11 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
         double e4 = CycleTimer::currentSeconds();
 
         findnearest += e4 - s4;
+
+        for (int i =0; i < 5; ++i) {
+        printf ("hhhid %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[i].x );
+    }
+
         // 6. find the mean for clusters and update centroids
         double s5 = CycleTimer::currentSeconds();
         // update cluster, sum all points in each cluster
@@ -544,8 +555,13 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
 
     /** Rearrange Points so that M 1-n is in decreasing order. (Points need more iterations of find min distance goes first) **/
     // using merge sort
+        for (int i =0; i < 15; ++i) {
+        printf ("id %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[i].x );
+    }
     mergeSort(points_list, 0, num_points - 1);
-
+    for (int i =0; i < 15; ++i) {
+        printf ("id %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[i].x );
+    }
     /** copy sorted points to GPU. Iteration is complete **/
 
     cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost);
@@ -555,6 +571,7 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     do
     {
         // point label process:
+        cudaMemcpy(gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice);
         // build ICD matrix, store distance between two centroids
         double s1 = CycleTimer::currentSeconds();
         build_ICD_matrix(icd_matrix, clusters, centroids_list);
@@ -623,12 +640,13 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
         // check convergence
 
         delta = (float)threshold_change / num_points;
-
+        
         ++curr_iters;
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
 
-    } while (delta > 0.000001 && curr_iters < 20000);
+    } while (delta > 0.00001 && curr_iters < 50000);
+    printf ("delta %d %.3f \n", threshold_change, delta);
     double endTime = CycleTimer::currentSeconds();
 
     printf("Epoch 2: Convergence of Centroid Clusters takes %.3f, it takes %d iterations\n", endTime - startTime, curr_iters - ep1_iter);
