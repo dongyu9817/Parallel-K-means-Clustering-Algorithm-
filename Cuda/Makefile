@@ -1,6 +1,6 @@
-EXECUTABLE := kmeans_cuda_triangle
+EXECUTABLE := kmeans_cuda_load
 
-CU_FILES   := kmeans_cuda_triangle.cu
+CU_FILES   := kmeans_cuda_load.cu
 
 CU_DEPS    :=
 
@@ -17,7 +17,7 @@ LDFLAGS=-L/usr/local/depot/cuda-10.2/lib64/ -lcudart
 NVCC=nvcc
 NVCCFLAGS=-O3 -m64 --gpu-architecture compute_61 -ccbin /usr/bin/gcc
 
-OBJS=$(OBJDIR)/cudaMain.o  $(OBJDIR)/kmeans_cuda_triangle.o
+OBJS=$(OBJDIR)/cudaMain.o  $(OBJDIR)/kmeans_cuda_load.o
 
 
 .PHONY: dirs clean

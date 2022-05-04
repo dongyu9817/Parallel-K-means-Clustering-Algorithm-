@@ -71,44 +71,42 @@ __global__ static void findDistanceCalculations(points_t *gpu_points_list, centr
 {
     // gpu find the nearnest neighbor parallel function
     // each thread is responsible for one datapoint
+    
     int numPoints = gpu_metadata->numpoints;
     int clusters = gpu_metadata->cluster;
     int dataid = blockDim.x * blockIdx.x + threadIdx.x;
     if (dataid > numPoints)
         return;
-
     float path_min = 0;
     int org_cluster_id = gpu_points_list[dataid].cluster;
-    int org_dist = compute_point_distance(gpu_points_list[dataid],
-                                          gpu_centroids_list[org_cluster_id]);
-    int cluster_id = org_cluster_id;
-    int curCnt = 0;
+    int cluster_id = 0;
     float path_curr;
+    int close_centroid_id = org_cluster_id;
+    int org_dist = compute_point_distance(gpu_points_list[dataid], gpu_centroids_list[org_cluster_id]);
+    //j is rid cluster index
     int num_discals = 0;
-
-    int old_cindex = org_cluster_id * clusters;
-    for (int j = 1; j < clusters; ++j)
+    for (int j = 0; j < clusters; ++j)
     {
-        curCnt = gpu_rid_matrix[old_cindex + j];
-        if (gpu_icd_matrix[old_cindex + curCnt] > 2 * org_dist)
+        close_centroid_id = gpu_rid_matrix[org_cluster_id * clusters + j];
+        //rest can be omitted
+        if (gpu_icd_matrix[org_cluster_id * clusters + close_centroid_id] > 2 * org_dist)
         {
-            cluster_id = curCnt;
-            num_discals = j;
             break;
         }
-        // failed on triangle inequalities, continue to orginal calculation of distance
-        path_curr = compute_point_distance(gpu_points_list[dataid], gpu_centroids_list[curCnt]);
-
+        path_curr = compute_point_distance(gpu_points_list[dataid], gpu_centroids_list [gpu_rid_matrix[org_cluster_id * clusters + j] ] );
         if (path_min == 0 || path_curr < path_min)
         {
             path_min = path_curr;
-            cluster_id = curCnt;
-            num_discals = j;
+            cluster_id = gpu_rid_matrix[org_cluster_id * clusters + j];
         }
+        num_discals = j;
     }
+
     // assign updated label centroid to the data point, in this case, distance stores the number of distance calculation iterations it takes to label a point
     gpu_points_list[dataid].cluster = cluster_id;
-    gpu_points_list[dataid].distance = num_discals;
+    gpu_points_list[dataid].distance = (float)num_discals;
+
+
     // printf ("val id %d changes from %d to %d\n", dataid, org_cluster_id, gpu_points_list[dataid].cluster);
     //   use reduction function to get sum of point's cluster change in each block
     extern __shared__ int shared_blockpoints_change[];
@@ -143,41 +141,39 @@ __global__ static void findNearnestNeighbor(points_t *gpu_points_list, centroids
 {
     // gpu find the nearnest neighbor parallel function
     // each thread is responsible for one datapoint
+    
     int numPoints = gpu_metadata->numpoints;
     int clusters = gpu_metadata->cluster;
     int dataid = blockDim.x * blockIdx.x + threadIdx.x;
     if (dataid > numPoints)
         return;
-
     float path_min = 0;
     int org_cluster_id = gpu_points_list[dataid].cluster;
-    int org_dist = compute_point_distance(gpu_points_list[dataid],
-                                          gpu_centroids_list[org_cluster_id]);
-    int cluster_id = org_cluster_id;
-    int curCnt = 0;
+    int cluster_id = 0;
     float path_curr;
-
-    int old_cindex = org_cluster_id * clusters;
-    for (int j = 1; j < clusters; ++j)
+    int close_centroid_id = org_cluster_id;
+    int org_dist = compute_point_distance(gpu_points_list[dataid], gpu_centroids_list[org_cluster_id]);
+    //j is rid cluster index
+    for (int j = 0; j < clusters; ++j)
     {
-        curCnt = gpu_rid_matrix[old_cindex + j];
-        if (gpu_icd_matrix[old_cindex + curCnt] > 2 * org_dist)
+        close_centroid_id = gpu_rid_matrix[org_cluster_id * clusters + j];
+        //rest can be omitted
+        if (gpu_icd_matrix[org_cluster_id * clusters + close_centroid_id] > 2 * org_dist)
         {
-            cluster_id = curCnt;
             break;
         }
-        // failed on triangle inequalities, continue to orginal calculation of distance
-        path_curr = compute_point_distance(gpu_points_list[dataid], gpu_centroids_list[curCnt]);
-
+        path_curr = compute_point_distance(gpu_points_list[dataid], gpu_centroids_list [gpu_rid_matrix[org_cluster_id * clusters + j] ] );
         if (path_min == 0 || path_curr < path_min)
         {
             path_min = path_curr;
-            cluster_id = curCnt;
+            cluster_id = gpu_rid_matrix[org_cluster_id * clusters + j];
         }
     }
+
     // assign updated label centroid to the data point
     gpu_points_list[dataid].cluster = cluster_id;
     gpu_points_list[dataid].distance = path_min;
+
     // printf ("val id %d changes from %d to %d\n", dataid, org_cluster_id, gpu_points_list[dataid].cluster);
     //   use reduction function to get sum of point's cluster change in each block
     extern __shared__ int shared_blockpoints_change[];
@@ -372,9 +368,6 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     metaData->iterations = iterations;
     metaData->cluster = clusters;
 
-    for (int i =0; i < 5; ++i) {
-        printf ("yyyid %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[300].x );
-    }
 
     // icd and rid matrix, used for triangle inequalities
     int matrixSize = clusters * clusters;
@@ -435,7 +428,7 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     float delta = 0.0;
     float var =0.0;
     float percentage_change = 1.0;
-    float delta_diff = 0.0;
+
     double icdtime = 0.0;
     double ridtime = 0.0;
     double copytime = 0.0;
@@ -485,10 +478,6 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
         double e4 = CycleTimer::currentSeconds();
 
         findnearest += e4 - s4;
-
-        for (int i =0; i < 5; ++i) {
-        printf ("hhhid %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[i].x );
-    }
 
         // 6. find the mean for clusters and update centroids
         double s5 = CycleTimer::currentSeconds();
@@ -555,13 +544,9 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
 
     /** Rearrange Points so that M 1-n is in decreasing order. (Points need more iterations of find min distance goes first) **/
     // using merge sort
-        for (int i =0; i < 15; ++i) {
-        printf ("id %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[i].x );
-    }
+
     mergeSort(points_list, 0, num_points - 1);
-    for (int i =0; i < 15; ++i) {
-        printf ("id %d dis is %d cluster %d x axis %d \n", i, points_list[i].distance, points_list[i].cluster, points_list[i].x );
-    }
+
     /** copy sorted points to GPU. Iteration is complete **/
 
     cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost);
