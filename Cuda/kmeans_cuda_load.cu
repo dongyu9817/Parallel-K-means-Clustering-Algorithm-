@@ -1,5 +1,5 @@
 /**
- * Cuda K-means cluster Algorithm with load balanced
+ * Cuda K-means cluster Algorithm with load balanced using two epoches data parallel design
  * Yu Dong (Yu Dong)
  *
  * This is an efficient CUDA-based inequality reinforced k-means algorithm

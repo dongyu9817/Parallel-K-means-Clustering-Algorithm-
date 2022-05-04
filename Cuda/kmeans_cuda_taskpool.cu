@@ -228,7 +228,7 @@ void build_RID_matrix(float *icd_matrix, int *rid_matrix, int cluster)
 /**
  * Main function of cuda kmeans algorithm, called from main.cpp
  **/
-double kmeans_cuda_triangle_ineq(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
+double kmeans_cuda_dynamic_pool(int *n_points, int clusters, points_t **p_list, centroids_t **c_list, int iterations)
 {
     // host data
     points_t *points_list = *p_list;
@@ -240,6 +240,12 @@ double kmeans_cuda_triangle_ineq(int *n_points, int clusters, points_t **p_list,
     metaData->numpoints = num_points;
     metaData->iterations = iterations;
     metaData->cluster = clusters;
+
+    /** set up dynamic task pool management with work stealing **/
+    float portion = 0.5f //add this portion of tasks to the shared memory
+    //this is the size of the task queue in the shared memory. Each thread will assign about 50% of its tasks in the beginning and do its own remaining works.
+    int capacity = portion * numPoints * threadPerBlock;
+
 
     // icd and rid matrix, used for triangle inequalities
     int matrixSize = clusters * clusters;
@@ -260,7 +266,7 @@ double kmeans_cuda_triangle_ineq(int *n_points, int clusters, points_t **p_list,
         centroids_list[i].count = 0;
     }
 
-    // two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step.
+    /**  two auxiliary steps (calculating and sorting the inter-centroid distances) are included before the labeling step. **/
 
     // device data on gpu
     points_t *gpu_points_list;

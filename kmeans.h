@@ -34,6 +34,13 @@ typedef struct {
     //holds the general set up information of the kmeans algorithm
 } metaInfo_t;
 
+//structure for the dynamic workload queue
+typedef struct { 
+    int index;
+    points_t task;
+
+} queue_t;
+
 void kmeans_sequential(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
 double  kmeans_cuda(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
 double  kmeans_cuda_triangle_ineq(int* num_points, int clusters, points_t** points_list, centroids_t** centroids_list, int iterations);
