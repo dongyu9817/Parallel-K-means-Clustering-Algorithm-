@@ -185,15 +185,22 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
     float delta = 0.0;
     double startTime = CycleTimer::currentSeconds();
     
+    double c1 =0;
+    double fn =0;
+    double fc =0;
+
     do
     {
         // get the nearest centroids
+        double sc1 = CycleTimer::currentSeconds();
         cudaMemcpy(gpu_centroids_list, centroids_list, sizeof(centroids_t) * clusters, cudaMemcpyHostToDevice);
         findNearnestNeighbor<<<blocks, threadPerBlock, blocks_sharedInfo>>>(gpu_points_list, gpu_centroids_list, gpu_metaData, pBlock_changes);
         //cudaDeviceSynchronize();
         
         cudaMemcpy(points_list, gpu_points_list, num_points * sizeof(points_t), cudaMemcpyDeviceToHost); // for (int i = 0; i < num_points; ++i)
-
+        double sc1e = CycleTimer::currentSeconds();
+        c1 += (sc1e - sc1);
+        double fcs = CycleTimer::currentSeconds();
         // update cluster, sum all points in each cluster
         for (int i = 0; i < num_points; ++i)
         {
@@ -219,20 +226,30 @@ double kmeans_cuda(int *n_points, int clusters, points_t **p_list, centroids_t *
             centroids_list[i].sum_px = 0;
             centroids_list[i].sum_py = 0;
         }
+        double fce = CycleTimer::currentSeconds();
+        fc += (fce - fcs);
+        double fns = CycleTimer::currentSeconds();
         // find delta, will compared with threshold in the while condition
         find_change_reduction<<<1, blocks_rounded, blocks_sharedInfo_reduced>>>(pBlock_changes, blocks, blocks_rounded);
         // block change array sums the number of points change cluster in that block
+        double fne = CycleTimer::currentSeconds();
+        fn += (fne -fns);
+        double c2s = CycleTimer::currentSeconds();
         cudaDeviceSynchronize();
         cudaMemcpy(&threshold_change, pBlock_changes, sizeof(int), cudaMemcpyDeviceToHost);
+        double c2e = CycleTimer::currentSeconds();
+        c1 += (c2e - c2s);
         // check convergence
         ++curr_iters; 
         delta = (float) threshold_change / num_points;
         // convergence = compute_convergence (centroids_list, clusters);
         // //printf ("new the nearest centroids %d %d\n", centroids_list[0].x, centroids_list[0].y );
-        printf ("curr delta %d %.3f \n", curr_iters, delta);
+        //printf ("curr delta %d %.3f \n", curr_iters, delta);
 
     }while (delta > 0.000001 && curr_iters < 200000);
-
+    printf ("copy %lf \n", c1 * 1000);
+    printf ("fn time %lf \n", fn * 1000);
+    printf ("fc time %lf \n", fc * 1000);
     double endTime = CycleTimer::currentSeconds();
     double overallDuration = endTime - startTime;
     return overallDuration;

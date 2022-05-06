@@ -637,13 +637,11 @@ double kmeans_cuda_triangle_ineq_loadWithepoch(int *n_points, int clusters, poin
     printf("Epoch 2: Convergence of Centroid Clusters takes %.3f, it takes %d iterations\n", endTime - startTime, curr_iters - ep1_iter);
     printf("Total convergence iterations: %d \n", curr_iters);
 
-    printf("pass icd time %.3f \n", icdtime);
-    printf("pass rid time %.3f \n", ridtime);
-    printf("pass copy time %.3f \n", copytime);
-    printf("pass find nearest centroid time %.3f \n", findnearest);
-    printf("pass updated centroid time %.3f \n", updatecentroid);
+    printf ("pass copy time %.3f \n", (copytime + icdtime + ridtime) * 1000);
+    printf ("pass find nearest centroid time %.3f \n", findnearest * 1000 );
+    printf ("pass updated centroid time %.3f \n", updatecentroid * 1000);
     // delta > 0.000001 &&
 
-    double overallDuration = endTime - startTime;
+    double overallDuration = endTime - ep1_startTime;
     return overallDuration;
 }

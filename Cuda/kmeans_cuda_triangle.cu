@@ -399,11 +399,11 @@ double kmeans_cuda_triangle_ineq(int *n_points, int clusters, points_t **p_list,
     printf ("delta %d %.3f \n", threshold_change, delta);
 
     double endTime = CycleTimer::currentSeconds();
-    printf ("pass icd time %.3f \n", icdtime);
-    printf ("pass rid time %.3f \n", ridtime );
-    printf ("pass copy time %.3f \n", copytime);
-    printf ("pass find nearest centroid time %.3f \n", findnearest );
-    printf ("pass updated centroid time %.3f \n", updatecentroid);
+    // printf ("pass icd time %.3f \n", icdtime);
+    // printf ("pass rid time %.3f \n", ridtime );
+    printf ("pass copy time %.3f \n", (copytime + icdtime + ridtime) * 1000);
+    printf ("pass find nearest centroid time %.3f \n", findnearest * 1000 );
+    printf ("pass updated centroid time %.3f \n", updatecentroid * 1000);
     //delta > 0.000001 && 
     
     double overallDuration = endTime - startTime;
