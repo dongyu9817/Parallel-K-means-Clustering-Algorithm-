@@ -67,6 +67,5 @@ We also began implementing a parallel version of this code in CUDA, but unfortun
 ### Peliminary Results
 Currently, I implemented a visualization and timing function of the sequential K-means clustering algorithm. Taking the dataset data/3000_20_a1.txt as an example. below are its clustering and timing results.
 
-![figure_1](https://user-images.githubusercontent.com/43794945/162873360-46d776fb-42ca-440f-ad2f-80386f5131f6.png)
-![image](https://user-images.githubusercontent.com/43794945/162873566-0738af29-1166-4180-905d-29e30fac19c7.png)
+
 
